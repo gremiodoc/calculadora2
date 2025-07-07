@@ -3,46 +3,52 @@ document.addEventListener('DOMContentLoaded', () => {
     const resultsDiv = document.getElementById('results');
     const resetButton = document.getElementById('reset-button');
 
-    // ✅ Usamos una API actualizada y más confiable
+    // Función para obtener el dólar BCV con timeout
     async function getDollarRate() {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 5000); // 5 segundos
+
         try {
-            const response = await fetch('https://pydolarve.org/api/v1/bs_dolar ');
+            const response = await fetch('https://pydolarve.org/api/v1/bs_dolar ', {
+                signal: controller.signal
+            });
+
+            clearTimeout(timeoutId);
+
+            if (!response.ok) throw new Error("Error en la conexión con la API");
+
             const data = await response.json();
 
-            // Convertimos el valor a número
-            const dollarRateBCV = parseFloat(data.oficial);
+            const dollarRate = parseFloat(data.oficial.replace(',', '.'));
 
-            if (!isNaN(dollarRateBCV)) {
-                return dollarRateBCV;
-            } else {
-                throw new Error("No se pudo obtener la cotización válida del dólar");
+            if (isNaN(dollarRate)) {
+                throw new Error("Valor del dólar no válido");
             }
+
+            return dollarRate;
+
         } catch (error) {
-            console.error('Error obteniendo la cotización:', error);
+            console.error("Error al obtener cotización:", error.message);
             return null;
         }
     }
 
+    // Cálculo de vacaciones
     function calculateVacations(salary) {
         const daysBase = 60;
         const daysSchoolSupplies = 30;
         const daysUniforms = 60;
 
-        const totalDays = daysBase + daysSchoolSupplies + daysUniformes;
         const dailySalary = salary / 15;
 
-        const baseAmount = daysBase * dailySalary;
-        const schoolSuppliesAmount = daysSchoolSupplies * dailySalary;
-        const uniformsAmount = daysUniforms * dailySalary;
-
         return {
-            baseAmount,
-            schoolSuppliesAmount,
-            uniformsAmount,
-            totalAmount: baseAmount + schoolSuppliesAmount + uniformsAmount,
+            baseAmount: daysBase * dailySalary,
+            schoolSuppliesAmount: daysSchoolSupplies * dailySalary,
+            uniformsAmount: daysUniforms * dailySalary,
         };
     }
 
+    // Evento principal
     form.addEventListener('submit', async (event) => {
         event.preventDefault();
 
@@ -50,21 +56,21 @@ document.addEventListener('DOMContentLoaded', () => {
         const salary = parseFloat(salaryInput.value);
 
         if (!isNaN(salary) && salary > 0) {
-            const { baseAmount, schoolSuppliesAmount, uniformsAmount, totalAmount } = calculateVacations(salary);
-            const dollarRateBCV = await getDollarRate(); // Obtener el valor del dólar
+            const { baseAmount, schoolSuppliesAmount, uniformsAmount } = calculateVacations(salary);
+            const dollarRateBCV = await getDollarRate(); // Obtener valor del dólar
 
             let finalResult = `
                 <p><strong>Base (60 días):</strong> ${baseAmount.toFixed(2)}</p>
                 <p><strong>Útiles Escolares (30 días):</strong> ${schoolSuppliesAmount.toFixed(2)}</p>
                 <p><strong>Uniformes (60 días):</strong> ${uniformsAmount.toFixed(2)}</p>
                 <hr>
-                <p><strong>Total sin ajustes:</strong> ${totalAmount.toFixed(2)}</p>
+                <p><strong>Total sin ajustes:</strong> ${(baseAmount + schoolSuppliesAmount + uniformsAmount).toFixed(2)}</p>
             `;
 
             if (dollarRateBCV !== null) {
                 const bcvAdjustment = 40 * dollarRateBCV;
                 const patriaAdjustment = 50 * dollarRateBCV;
-                const totalWithAdjustments = totalAmount + bcvAdjustment + patriaAdjustment;
+                const totalWithAdjustments = baseAmount + schoolSuppliesAmount + uniformsAmount + bcvAdjustment + patriaAdjustment;
 
                 finalResult += `
                     <p><strong>Ajuste BCV ($40):</strong> ${bcvAdjustment.toFixed(2)}</p>
@@ -82,6 +88,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
+    // Reiniciar formulario
     resetButton.addEventListener('click', () => {
         form.reset();
         resultsDiv.innerHTML = '';
